@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Recording App</title>
+  <style>
+    /* Стили для элементов интерфейса */
+    .video-container {
+      position: relative;
+      width: 100%;
+      height: 0;
+      padding-bottom: 56.25%; /* соотношение сторон 16:9 для видео */
+    }
+
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .record-btn {
+      margin-top: 10px;
+      padding: 10px 20px;
+      background-color: #ff5252;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .record-btn:active {
+      background-color: #e60000;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="video-container">
+      <video id="videoStream" autoplay></video>
+    </div>
+
+    <button class="record-btn" @click="toggleRecording">{{ recording ? 'Stop Recording' : 'Start Recording' }}</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+  <script>
+    new Vue({
+      el: '#app',
+      data: {
+        recording: false,
+        mediaRecorder: null,
+        chunks: [],
+        stream: null
+      },
+      mounted() {
+        this.startCamera(); // вызов метода при загрузке страницы
+      },
+      methods: {
+        startCamera() {
+          navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+            .then(stream => {
+              // Получаем доступ к видеопотоку и показываем его в элементе video
+              const videoElement = document.getElementById('videoStream');
+              videoElement.srcObject = stream;
+              this.stream = stream;
+            })
+            .catch(error => {
+              console.error('Ошибка доступа к камере:', error);
+            });
+        },
+        toggleRecording() {
+          if (!this.recording) {
+            this.startRecording();
+          } else {
+            this.stopRecording();
+          }
+        },
+        startRecording() {
+          this.chunks = [];
+          const videoTracks = this.stream.getVideoTracks();
+          const options = { mimeType: 'video/webm' }; // тип видеофайла
+
+          try {
+            this.mediaRecorder = new MediaRecorder(videoTracks[0], options);
+          } catch (error) {
+            console.error('Ошибка создания объекта MediaRecorder:', error);
+            return;
+          }
+
+          this.mediaRecorder.ondataavailable = event => {
+            if (event.data && event.data.size > 0) {
+              this.chunks.push(event.data);
+            }
+          };
+
+          this.mediaRecorder.onstop = () => {
+            this.saveRecording();
+          };
+
+          this.mediaRecorder.start();
+          this.recording = true;
+        },
+        stopRecording() {
+          this.mediaRecorder.stop();
+          this.recording = false;
+        },
+        saveRecording() {
+        const blob = new Blob(this.chunks, { type: 'video/webm' });
+
+        const formData = new FormData();
+        formData.append('video', blob, 'recorded_video.webm');
+
+        fetch('/your-backend-endpoint', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => {
+            if (response.ok) {
+                console.log('Видео успешно отправлено на сервер');
+            } else {
+                console.error('Ошибка при отправке видео на сервер:', response.status);
+                }
+            })
+            .catch(error => {
+            console.error('Ошибка при отправке видео на сервер:', error);
+            });
+        }
+
+      }
+    });
+  </script>
+</body>
+</html>
